@@ -1,0 +1,29 @@
+name: Nix flake check
+
+on:
+  pull_request: &conditions
+    branches:
+      - master
+    paths:
+      - ".github/workflows/flake-check.yaml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "flake.lock"
+      - "flake.nix"
+      - "src/**"
+      - "tests/**"
+  push:
+    <<: *conditions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v19
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+      - uses: DeterminateSystems/flake-checker-action@v12
+
+      - name: nix flake check
+        run: |
+          nix flake check
