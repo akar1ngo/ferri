@@ -1,0 +1,7 @@
+.DS_Store
+.direnv/
+.env*
+/doc
+/result
+/target
+/vendor
