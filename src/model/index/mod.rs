@@ -60,26 +60,25 @@ impl Platform {
         }
 
         // Validate os.features for Windows
-        if self.os == "windows" {
-            if let Some(ref features) = self.os_features {
-                for feature in features {
-                    if !is_valid_windows_feature(feature) {
-                        return Err(PlatformError::InvalidWindowsFeature(feature.clone()));
-                    }
+        if self.os == "windows"
+            && let Some(ref features) = self.os_features
+        {
+            for feature in features {
+                if !is_valid_windows_feature(feature) {
+                    return Err(PlatformError::InvalidWindowsFeature(feature.clone()));
                 }
             }
         }
 
         // Validate variant for ARM architectures
-        if self.architecture == "arm" || self.architecture == "arm64" {
-            if let Some(ref variant) = self.variant {
-                if !is_valid_arm_variant(&self.architecture, variant) {
-                    return Err(PlatformError::InvalidArmVariant(
-                        self.architecture.clone(),
-                        variant.clone(),
-                    ));
-                }
-            }
+        if (self.architecture == "arm" || self.architecture == "arm64")
+            && let Some(ref variant) = self.variant
+            && !is_valid_arm_variant(&self.architecture, variant)
+        {
+            return Err(PlatformError::InvalidArmVariant(
+                self.architecture.clone(),
+                variant.clone(),
+            ));
         }
 
         Ok(())

@@ -217,14 +217,12 @@ pub async fn put_manifest(
 /// Validates Content-Range header format and position
 fn validate_content_range(range_str: &str, expected_start: usize) -> bool {
     // Expected format: "bytes start-end/*" or "bytes start-end/total"
-    if let Some(bytes_part) = range_str.strip_prefix("bytes ") {
-        if let Some((range_part, _)) = bytes_part.split_once('/') {
-            if let Some((start_str, _)) = range_part.split_once('-') {
-                if let Ok(start) = start_str.parse::<usize>() {
-                    return start == expected_start;
-                }
-            }
-        }
+    if let Some(bytes_part) = range_str.strip_prefix("bytes ")
+        && let Some((range_part, _)) = bytes_part.split_once('/')
+        && let Some((start_str, _)) = range_part.split_once('-')
+        && let Ok(start) = start_str.parse::<usize>()
+    {
+        return start == expected_start;
     }
     false
 }

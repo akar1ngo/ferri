@@ -68,10 +68,10 @@ pub async fn list_repositories(
 
 pub fn paginate<T: PartialEq>(items: &mut Vec<T>, last: Option<&T>, n: Option<u32>) {
     // If `last` is provided and found, drop everything up to and including it.
-    if let Some(last) = last {
-        if let Some(pos) = items.iter().position(|item| item == last) {
-            items.drain(..=pos);
-        }
+    if let Some(last) = last
+        && let Some(pos) = items.iter().position(|item| item == last)
+    {
+        items.drain(..=pos);
     }
 
     // Apply limit `n` if provided.
