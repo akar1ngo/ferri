@@ -9,6 +9,7 @@ strip = true
 
 [dependencies]
 actix-web = "4.11.0"
+async-trait = "0.1.88"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }
 digest = "0.10.7"
 env_logger = "0.11.8"
