@@ -107,7 +107,6 @@ impl StorageBackend for MemoryStorage {
     }
 }
 
-#[derive(Debug)]
 pub struct FileSystemStorage {
     pub root: PathBuf,
 }
