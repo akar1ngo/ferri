@@ -10,25 +10,28 @@ use actix_web::http::header::HeaderMap;
 use actix_web::{App, test, web};
 use serde_json::Value;
 
-use crate::distribution::{MemoryStorage, configure_routes};
+use crate::distribution::{StorageService, configure_routes};
 
 /// Test client for making requests to the registry
 pub struct RegistryTestClient {
-    storage: MemoryStorage,
+    storage: web::Data<StorageService>,
 }
 
 impl RegistryTestClient {
     /// Creates a new test client with empty storage
     pub async fn new() -> Self {
-        let storage = MemoryStorage::new();
-        Self { storage }
+        let storage = StorageService::new_memory();
+        Self {
+            storage: web::Data::new(storage),
+        }
     }
 
     /// Creates a new test client with sample data pre-loaded
     pub async fn with_sample_data() -> Self {
-        let storage = MemoryStorage::new();
-        storage.populate_with_sample_data().unwrap();
-        Self { storage }
+        let storage = StorageService::new_memory_with_sample_data();
+        Self {
+            storage: web::Data::new(storage),
+        }
     }
 
     /// Makes a GET request to the specified path
@@ -87,7 +90,7 @@ impl RegistryTestClient {
         let app = test::init_service(
             App::new()
                 .wrap(actix_web::middleware::NormalizePath::trim())
-                .app_data(web::Data::new(self.storage.clone()))
+                .app_data(self.storage.clone())
                 .configure(configure_routes),
         )
         .await;

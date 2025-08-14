@@ -3,7 +3,7 @@
 use actix_web::{HttpResponse, Result, get, web};
 use serde::{Deserialize, Serialize};
 
-use crate::distribution::{DistributionError, MemoryStorage};
+use crate::distribution::{DistributionError, StorageService};
 
 #[derive(Deserialize)]
 pub struct ListTagsQuery {
@@ -26,10 +26,10 @@ pub struct TagsResponse {
 pub async fn list_tags(
     path: web::Path<String>,
     query: web::Query<ListTagsQuery>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let name = path.into_inner();
-    let mut tags = storage.list_tags(&name)?;
+    let mut tags = storage.list_tags(&name).await?;
     paginate(&mut tags, query.last.as_ref(), query.n);
 
     let response = TagsResponse { name, tags };
@@ -56,9 +56,9 @@ pub struct CatalogResponse {
 #[get("/v2/_catalog")]
 pub async fn list_repositories(
     query: web::Query<CatalogQuery>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
-    let mut repositories = storage.list_repositories()?;
+    let mut repositories = storage.list_repositories().await?;
     paginate(&mut repositories, query.last.as_ref(), query.n);
 
     let response = CatalogResponse { repositories };

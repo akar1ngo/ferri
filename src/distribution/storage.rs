@@ -5,7 +5,7 @@
 //! with persistent storage backends like filesystem, S3, or database storage.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 use digest::Digest;
 use hmac_sha256::Hash;
@@ -47,16 +47,15 @@ impl ManifestEntry {
 }
 
 /// In-memory storage backend for registry data
-#[derive(Clone)]
 pub struct MemoryStorage {
     /// Stores blobs by digest
-    blobs: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    blobs: RwLock<HashMap<String, Vec<u8>>>,
     /// Stores manifests by repository and reference (tag or digest)
-    manifests: Arc<RwLock<HashMap<String, ManifestEntry>>>,
+    manifests: RwLock<HashMap<String, ManifestEntry>>,
     /// Stores tags by repository
-    tags: Arc<RwLock<HashMap<String, HashMap<String, String>>>>, // repo -> tag -> digest
+    tags: RwLock<HashMap<String, HashMap<String, String>>>, // repo -> tag -> digest
     /// Stores ongoing upload sessions
-    uploads: Arc<RwLock<HashMap<String, UploadSession>>>,
+    uploads: RwLock<HashMap<String, UploadSession>>,
 }
 
 impl Default for MemoryStorage {
@@ -69,10 +68,10 @@ impl MemoryStorage {
     /// Creates a new in-memory storage backend
     pub fn new() -> Self {
         Self {
-            blobs: Arc::new(RwLock::new(HashMap::new())),
-            manifests: Arc::new(RwLock::new(HashMap::new())),
-            tags: Arc::new(RwLock::new(HashMap::new())),
-            uploads: Arc::new(RwLock::new(HashMap::new())),
+            blobs: RwLock::new(HashMap::new()),
+            manifests: RwLock::new(HashMap::new()),
+            tags: RwLock::new(HashMap::new()),
+            uploads: RwLock::new(HashMap::new()),
         }
     }
 

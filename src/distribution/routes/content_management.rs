@@ -2,7 +2,7 @@
 
 use actix_web::{HttpResponse, Result, delete, web};
 
-use crate::distribution::{DistributionError, MemoryStorage};
+use crate::distribution::{DistributionError, StorageService};
 
 /// Delete manifest - `DELETE /v2/<name>/manifests/<reference>`
 ///
@@ -11,10 +11,10 @@ use crate::distribution::{DistributionError, MemoryStorage};
 #[delete("/v2/{name:.*}/manifests/{reference}")]
 pub async fn delete_manifest(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, reference) = path.into_inner();
-    storage.delete_manifest(&name, &reference)?;
+    storage.delete_manifest(&name, &reference).await?;
 
     Ok(HttpResponse::Accepted().finish())
 }
@@ -25,10 +25,10 @@ pub async fn delete_manifest(
 #[delete("/v2/{name:.*}/blobs/{digest}")]
 pub async fn delete_blob(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (_, digest) = path.into_inner();
-    storage.delete_blob(&digest)?;
+    storage.delete_blob(&digest).await?;
 
     Ok(HttpResponse::Accepted().finish())
 }
@@ -39,10 +39,10 @@ pub async fn delete_blob(
 #[delete("/v2/{name:.*}/tags/{reference}")]
 pub async fn delete_tag(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, reference) = path.into_inner();
-    storage.delete_manifest(&name, &reference)?;
+    storage.delete_manifest(&name, &reference).await?;
 
     Ok(HttpResponse::Accepted().finish())
 }

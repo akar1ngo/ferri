@@ -5,7 +5,7 @@ use actix_web::{HttpRequest, HttpResponse, Result, get, head, web};
 use digest::Digest;
 use hmac_sha256::Hash;
 
-use crate::distribution::{DistributionError, MemoryStorage};
+use crate::distribution::{DistributionError, StorageService};
 
 /// Get manifest - `GET /v2/<name>/manifests/<reference>`
 ///
@@ -14,11 +14,11 @@ use crate::distribution::{DistributionError, MemoryStorage};
 #[get("/v2/{name:.*}/manifests/{reference}")]
 pub async fn get_manifest(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, reference) = path.into_inner();
 
-    let manifest_entry = storage.get_manifest(&name, &reference)?;
+    let manifest_entry = storage.get_manifest(&name, &reference).await?;
     let digest = format!("sha256:{}", hex::encode(Hash::digest(&manifest_entry.data)));
 
     Ok(HttpResponse::Ok()
@@ -35,15 +35,15 @@ pub async fn get_manifest(
 #[head("/v2/{name:.*}/manifests/{reference}")]
 pub async fn head_manifest(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, reference) = path.into_inner();
 
-    if !storage.manifest_exists(&name, &reference)? {
+    if !storage.manifest_exists(&name, &reference).await? {
         return Err(DistributionError::ManifestUnknown(reference));
     }
 
-    let manifest_entry = storage.get_manifest(&name, &reference)?;
+    let manifest_entry = storage.get_manifest(&name, &reference).await?;
     let digest = format!("sha256:{}", hex::encode(Hash::digest(&manifest_entry.data)));
 
     Ok(HttpResponse::Ok()
@@ -60,10 +60,10 @@ pub async fn head_manifest(
 pub async fn get_blob(
     path: web::Path<(String, String)>,
     req: HttpRequest,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (_, digest) = path.into_inner();
-    let blob_data = storage.get_blob(&digest)?;
+    let blob_data = storage.get_blob(&digest).await?;
 
     if req.headers().contains_key(header::RANGE) {
         match header::Range::parse(&req) {
@@ -109,15 +109,15 @@ pub async fn get_blob(
 #[head("/v2/{name:.*}/blobs/{digest}")]
 pub async fn head_blob(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let (_, digest) = path.into_inner();
 
-    if !storage.blob_exists(&digest)? {
+    if !storage.blob_exists(&digest).await? {
         return Err(DistributionError::BlobUnknown(digest));
     }
 
-    let blob_data = storage.get_blob(&digest)?;
+    let blob_data = storage.get_blob(&digest).await?;
 
     Ok(HttpResponse::Ok()
         .insert_header(("Content-Type", "application/octet-stream"))

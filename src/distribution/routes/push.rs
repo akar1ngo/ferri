@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use actix_web::{HttpRequest, HttpResponse, Result, patch, post, put, web};
 use serde::Deserialize;
 
-use crate::distribution::{DistributionError, MemoryStorage};
+use crate::distribution::{DistributionError, StorageService};
 
 const MAX_BLOB_SIZE: usize = 1 << 30; // 1GB
 const MAX_MANIFEST_SIZE: usize = 4 << 20; // 4MB
@@ -24,14 +24,14 @@ pub struct UploadQuery {
 pub async fn start_blob_upload(
     path: web::Path<String>,
     query: web::Query<UploadQuery>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
 ) -> Result<HttpResponse, DistributionError> {
     let name = path.into_inner();
 
     // Check if this is a mount request
     if let (Some(digest), Some(from_repo)) = (query.mount.clone(), query.from.clone()) {
         // Attempt to mount blob from another repository
-        if storage.mount_blob(&from_repo, &name, &digest)? {
+        if storage.mount_blob(&from_repo, &name, &digest).await? {
             // Mount successful
             let blob_url = format!("/v2/{name}/blobs/{digest}");
             return Ok(HttpResponse::Created()
@@ -43,7 +43,7 @@ pub async fn start_blob_upload(
     }
 
     // Start new upload session
-    let session = storage.start_upload(&name)?;
+    let session = storage.start_upload(&name).await?;
     let upload_url = format!("/v2/{}/blobs/uploads/{}", name, session.uuid);
 
     Ok(HttpResponse::Accepted()
@@ -61,7 +61,7 @@ pub async fn start_blob_upload(
 pub async fn complete_blob_upload(
     path: web::Path<(String, String)>,
     query: web::Query<HashMap<String, String>>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
@@ -73,7 +73,7 @@ pub async fn complete_blob_upload(
         .ok_or_else(|| DistributionError::DigestInvalid("Missing digest parameter".to_string()))?;
 
     // Get the upload session
-    let mut session = storage.get_upload(&uuid)?;
+    let mut session = storage.get_upload(&uuid).await?;
 
     // If there's a body, append it as the final chunk
     if !body.is_empty() {
@@ -99,11 +99,11 @@ pub async fn complete_blob_upload(
 
         session.data.extend_from_slice(&body);
         // Update the session in storage with the new data
-        storage.update_upload(session)?;
+        storage.update_upload(session).await?;
     }
 
     // Complete the upload
-    storage.complete_upload(&uuid, digest)?;
+    storage.complete_upload(&uuid, digest).await?;
 
     // Return success response
     let blob_url = format!("/v2/{name}/blobs/{digest}");
@@ -119,14 +119,14 @@ pub async fn complete_blob_upload(
 #[patch("/v2/{name:.*}/blobs/uploads/{uuid}")]
 pub async fn chunked_blob_upload(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, uuid) = path.into_inner();
 
     // Get the upload session
-    let mut session = storage.get_upload(&uuid)?;
+    let mut session = storage.get_upload(&uuid).await?;
 
     // Check payload size before processing
     if body.len() > MAX_BLOB_SIZE {
@@ -156,7 +156,7 @@ pub async fn chunked_blob_upload(
     let current_offset = session.offset;
 
     // Update the session
-    storage.update_upload(session)?;
+    storage.update_upload(session).await?;
 
     // Return upload status
     let upload_url = format!("/v2/{name}/blobs/uploads/{uuid}");
@@ -176,7 +176,7 @@ pub async fn chunked_blob_upload(
 #[put("/v2/{name:.*}/manifests/{reference}")]
 pub async fn put_manifest(
     path: web::Path<(String, String)>,
-    storage: web::Data<MemoryStorage>,
+    storage: web::Data<StorageService>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
@@ -204,7 +204,9 @@ pub async fn put_manifest(
     validate_manifest_json(&manifest_data)?;
 
     // Store the manifest
-    let digest = storage.put_manifest(&name, &reference, manifest_data, content_type.to_string())?;
+    let digest = storage
+        .put_manifest(&name, &reference, manifest_data, content_type.to_string())
+        .await?;
 
     // Return success response
     let manifest_url = format!("/v2/{name}/manifests/{reference}");

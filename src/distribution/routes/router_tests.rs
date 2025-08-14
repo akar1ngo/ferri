@@ -3,13 +3,13 @@
 use actix_web::{App, test, web};
 use serde_json::Value;
 
-use crate::distribution::{MemoryStorage, configure_routes};
+use crate::distribution::{StorageService, configure_routes};
 
 /// Test cases derived from the registry:2 router test suite
 /// https://github.com/distribution/distribution/blob/v2.0.0/registry/api/v2/routes_test.go
 #[actix_web::test]
 async fn test_registry_v2_router_compatibility() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -159,7 +159,7 @@ async fn test_registry_v2_router_compatibility() {
 /// Test path traversal attack handling
 #[actix_web::test]
 async fn test_path_traversal_attacks() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -203,7 +203,7 @@ async fn test_path_traversal_attacks() {
 /// Test that invalid characters in repository names are rejected
 #[actix_web::test]
 async fn test_invalid_characters() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -254,7 +254,7 @@ async fn test_invalid_characters() {
 /// Test complex real-world repository names
 #[actix_web::test]
 async fn test_real_world_repository_names() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -325,7 +325,7 @@ async fn test_real_world_repository_names() {
 /// Test all HTTP methods on complex repository names
 #[actix_web::test]
 async fn test_all_methods_complex_names() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())

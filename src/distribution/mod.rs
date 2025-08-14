@@ -7,12 +7,14 @@ pub mod error;
 pub mod names;
 pub mod routes;
 pub mod storage;
+pub mod storage_service;
 
 use actix_web::web;
 pub use error::*;
 pub use names::*;
 pub use routes::*;
 pub use storage::*;
+pub use storage_service::*;
 
 /// Configures the distribution API routes using service macros
 ///

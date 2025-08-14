@@ -1,14 +1,12 @@
 use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer, middleware, web};
-use ferri::distribution::{self, DistributionError, MemoryStorage};
+use ferri::distribution::{self, DistributionError, StorageService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();
-
-    let storage = web::Data::new(MemoryStorage::new());
 
     HttpServer::new(move || {
         App::new()
@@ -32,7 +30,7 @@ async fn main() -> std::io::Result<()> {
                         .into()
                     }),
             )
-            .app_data(storage.clone())
+            .app_data(web::Data::new(StorageService::new_memory()))
             .configure(distribution::configure_routes)
     })
     .client_request_timeout(std::time::Duration::from_secs(600))

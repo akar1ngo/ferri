@@ -3,7 +3,7 @@ use ferri::distribution::*;
 
 #[actix_web::test]
 async fn test_api_version_check() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -23,7 +23,7 @@ async fn test_api_version_check() {
 
 #[actix_web::test]
 async fn test_manifest_not_found() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -41,7 +41,7 @@ async fn test_manifest_not_found() {
 
 #[actix_web::test]
 async fn test_blob_not_found() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -61,7 +61,7 @@ async fn test_blob_not_found() {
 
 #[actix_web::test]
 async fn test_catalog_empty() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
@@ -78,7 +78,7 @@ async fn test_catalog_empty() {
 
 #[actix_web::test]
 async fn test_complex_repository_names() {
-    let storage = MemoryStorage::new();
+    let storage = StorageService::new_memory();
     let app = test::init_service(
         App::new()
             .wrap(actix_web::middleware::NormalizePath::trim())
