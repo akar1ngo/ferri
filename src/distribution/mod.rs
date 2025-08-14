@@ -57,13 +57,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(routes::delete_tag);
 }
 
-/// Creates the main distribution API service with the provided storage backend
-pub fn create_service_with_storage(storage: MemoryStorage) -> impl actix_web::dev::HttpServiceFactory {
-    web::scope("")
-        .app_data(web::Data::new(storage))
-        .configure(configure_routes)
-}
-
 /// Configure routes without default storage (for use with external storage setup)
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg
