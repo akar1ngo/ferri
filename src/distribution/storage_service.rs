@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use digest::Digest;
+use hmac_sha256::Hash;
 use tokio::fs;
 
 use crate::distribution::storage::{ManifestEntry, MemoryStorage, UploadSession};
@@ -157,54 +160,283 @@ impl StorageBackend for FileSystemStorage {
     }
 
     async fn mount_blob(&self, _from_repo: &str, _to_repo: &str, digest: &str) -> DistributionResult<bool> {
-        // Check if blob exists for mounting
         Ok(self.blob_exists(digest).await.unwrap_or(false))
     }
 
     async fn put_manifest(
         &self,
-        _repository: &str,
-        _reference: &str,
-        _manifest_data: Vec<u8>,
-        _content_type: String,
+        repository: &str,
+        reference: &str,
+        manifest_data: Vec<u8>,
+        content_type: String,
     ) -> DistributionResult<String> {
-        todo!()
+        let repo_dir = self.root.join("repositories").join(repository);
+        let manifests_dir = repo_dir.join("manifests");
+
+        fs::create_dir_all(&manifests_dir)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        let digest = format!("sha256:{}", hex::encode(Hash::digest(&manifest_data)));
+
+        let manifest_entry = ManifestEntry::new(manifest_data, content_type);
+        let manifest_json =
+            serde_json::to_vec(&manifest_entry).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        let ref_path = manifests_dir.join(reference);
+        fs::write(&ref_path, &manifest_json)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        if !reference.starts_with("sha256:") && !reference.starts_with("sha512:") {
+            let digest_path = manifests_dir.join(&digest);
+            fs::write(&digest_path, &manifest_json)
+                .await
+                .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+            self.update_tag(repository, reference, &digest).await?;
+        }
+
+        Ok(digest)
     }
 
-    async fn get_manifest(&self, _repository: &str, _reference: &str) -> DistributionResult<ManifestEntry> {
-        todo!()
+    async fn get_manifest(&self, repository: &str, reference: &str) -> DistributionResult<ManifestEntry> {
+        let manifest_path = self
+            .root
+            .join("repositories")
+            .join(repository)
+            .join("manifests")
+            .join(reference);
+
+        let data = fs::read(&manifest_path)
+            .await
+            .map_err(|_| DistributionError::ManifestUnknown(reference.to_string()))?;
+
+        let manifest_entry: ManifestEntry =
+            serde_json::from_slice(&data).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(manifest_entry)
     }
 
-    async fn manifest_exists(&self, _repository: &str, _reference: &str) -> DistributionResult<bool> {
-        todo!()
+    async fn manifest_exists(&self, repository: &str, reference: &str) -> DistributionResult<bool> {
+        let manifest_path = self
+            .root
+            .join("repositories")
+            .join(repository)
+            .join("manifests")
+            .join(reference);
+
+        Ok(fs::metadata(manifest_path).await.is_ok())
     }
 
-    async fn delete_manifest(&self, _repository: &str, _reference: &str) -> DistributionResult<()> {
-        todo!()
+    async fn delete_manifest(&self, repository: &str, reference: &str) -> DistributionResult<()> {
+        let manifest_path = self
+            .root
+            .join("repositories")
+            .join(repository)
+            .join("manifests")
+            .join(reference);
+
+        fs::remove_file(&manifest_path)
+            .await
+            .map_err(|_| DistributionError::ManifestUnknown(reference.to_string()))?;
+
+        // Handle tag/digest cleanup
+        if reference.starts_with("sha256:") || reference.starts_with("sha512:") {
+            // Deleting by digest - remove all tags pointing to this digest
+            let mut tags = self.load_tags(repository).await.unwrap_or_default();
+            let tags_to_remove: Vec<String> = tags
+                .iter()
+                .filter(|(_, digest)| *digest == reference)
+                .map(|(tag, _)| tag.clone())
+                .collect();
+
+            for tag in tags_to_remove {
+                tags.remove(&tag);
+                // Also remove the tag-based manifest file
+                let tag_manifest_path = self
+                    .root
+                    .join("repositories")
+                    .join(repository)
+                    .join("manifests")
+                    .join(&tag);
+                let _ = fs::remove_file(tag_manifest_path).await;
+            }
+
+            self.save_tags(repository, &tags).await?;
+        } else {
+            // Deleting by tag - also remove the digest-based manifest
+            let mut tags = self.load_tags(repository).await.unwrap_or_default();
+            if let Some(digest) = tags.remove(reference) {
+                let digest_manifest_path = self
+                    .root
+                    .join("repositories")
+                    .join(repository)
+                    .join("manifests")
+                    .join(&digest);
+                let _ = fs::remove_file(digest_manifest_path).await;
+            }
+            self.save_tags(repository, &tags).await?;
+        }
+
+        Ok(())
     }
 
-    async fn list_tags(&self, _repository: &str) -> DistributionResult<Vec<String>> {
-        todo!()
+    async fn list_tags(&self, repository: &str) -> DistributionResult<Vec<String>> {
+        let tags = self.load_tags(repository).await.unwrap_or_default();
+        let mut tag_list: Vec<String> = tags.keys().cloned().collect();
+        tag_list.sort();
+
+        Ok(tag_list)
     }
 
     async fn list_repositories(&self) -> DistributionResult<Vec<String>> {
-        todo!()
+        let repos_dir = self.root.join("repositories");
+
+        if !repos_dir.exists() {
+            return Ok(Default::default());
+        }
+
+        let mut repos = Vec::new();
+        let mut stack = vec![repos_dir.clone()];
+
+        while let Some(current_dir) = stack.pop() {
+            let mut entries = fs::read_dir(&current_dir)
+                .await
+                .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+            while let Some(entry) = entries
+                .next_entry()
+                .await
+                .map_err(|e| DistributionError::InternalError(e.to_string()))?
+            {
+                let path = entry.path();
+                if path.is_dir() {
+                    let tags_file = path.join("tags.json");
+                    if tags_file.exists()
+                        && let Ok(repo_path) = path.strip_prefix(&repos_dir)
+                        && let Some(repo_name) = repo_path.to_str()
+                    {
+                        repos.push(repo_name.to_string());
+                    }
+
+                    stack.push(path);
+                }
+            }
+        }
+
+        repos.sort();
+        Ok(repos)
     }
 
-    async fn start_upload(&self, _repository: &str) -> DistributionResult<UploadSession> {
-        todo!()
+    async fn start_upload(&self, repository: &str) -> DistributionResult<UploadSession> {
+        let session = UploadSession::new(repository.to_string());
+        let uploads_dir = self.root.join("uploads");
+
+        fs::create_dir_all(&uploads_dir)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        // Serialize and save the session
+        let session_json = serde_json::to_vec(&session).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        let session_path = uploads_dir.join(&session.uuid);
+        fs::write(&session_path, session_json)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(session)
     }
 
-    async fn get_upload(&self, _uuid: &str) -> DistributionResult<UploadSession> {
-        todo!()
+    async fn get_upload(&self, uuid: &str) -> DistributionResult<UploadSession> {
+        let session_path = self.root.join("uploads").join(uuid);
+
+        let data = fs::read(&session_path)
+            .await
+            .map_err(|_| DistributionError::UploadUnknown(uuid.to_string()))?;
+
+        let session: UploadSession =
+            serde_json::from_slice(&data).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(session)
     }
 
-    async fn update_upload(&self, _session: UploadSession) -> DistributionResult<()> {
-        todo!()
+    async fn update_upload(&self, session: UploadSession) -> DistributionResult<()> {
+        let uploads_dir = self.root.join("uploads");
+        let session_path = uploads_dir.join(&session.uuid);
+
+        let session_json = serde_json::to_vec(&session).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        fs::write(&session_path, session_json)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(())
     }
 
-    async fn complete_upload(&self, _uuid: &str, _digest: &str) -> DistributionResult<()> {
-        todo!()
+    async fn complete_upload(&self, uuid: &str, digest: &str) -> DistributionResult<()> {
+        let session_path = self.root.join("uploads").join(uuid);
+        let session = self.get_upload(uuid).await?;
+
+        let calculated_digest = format!("sha256:{}", hex::encode(Hash::digest(&session.data)));
+        if calculated_digest != digest {
+            return Err(DistributionError::DigestInvalid(format!(
+                "Expected {digest}, got {calculated_digest}"
+            )));
+        }
+
+        self.put_blob(digest, session.data).await?;
+
+        // Clean up upload session
+        fs::remove_file(&session_path)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(())
+    }
+}
+
+impl FileSystemStorage {
+    /// Load tags for a repository from the tags.json file
+    async fn load_tags(&self, repository: &str) -> DistributionResult<HashMap<String, String>> {
+        let tags_path = self.root.join("repositories").join(repository).join("tags.json");
+
+        if !tags_path.exists() {
+            return Ok(HashMap::new());
+        }
+
+        let data = fs::read(&tags_path)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        let tags: HashMap<String, String> =
+            serde_json::from_slice(&data).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(tags)
+    }
+
+    /// Save tags for a repository to the tags.json file
+    async fn save_tags(&self, repository: &str, tags: &HashMap<String, String>) -> DistributionResult<()> {
+        let repo_dir = self.root.join("repositories").join(repository);
+        fs::create_dir_all(&repo_dir)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        let tags_path = repo_dir.join("tags.json");
+        let tags_json = serde_json::to_vec_pretty(tags).map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        fs::write(&tags_path, tags_json)
+            .await
+            .map_err(|e| DistributionError::InternalError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update a single tag mapping
+    async fn update_tag(&self, repository: &str, tag: &str, digest: &str) -> DistributionResult<()> {
+        let mut tags = self.load_tags(repository).await.unwrap_or_default();
+        tags.insert(tag.to_string(), digest.to_string());
+        self.save_tags(repository, &tags).await
     }
 }
 
@@ -363,5 +595,92 @@ impl StorageService {
             StorageBackendType::Memory(mem) => mem.complete_upload(uuid, digest),
             StorageBackendType::FileSystem(fs) => fs.complete_upload(uuid, digest).await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_filesystem_storage_basic_operations() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FileSystemStorage::new(temp_dir.path().to_path_buf());
+
+        let digest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let data = b"test data".to_vec();
+
+        assert!(!storage.blob_exists(digest).await.unwrap());
+        storage.put_blob(digest, data.clone()).await.unwrap();
+
+        assert!(storage.blob_exists(digest).await.unwrap());
+        assert_eq!(storage.get_blob(digest).await.unwrap(), data);
+
+        let repo = "test/repo";
+        let tag = "latest";
+        let manifest_data = b"test manifest".to_vec();
+
+        let manifest_digest = storage
+            .put_manifest(
+                repo,
+                tag,
+                manifest_data.clone(),
+                "application/vnd.oci.image.manifest.v1+json".to_string(),
+            )
+            .await
+            .unwrap();
+
+        assert!(storage.manifest_exists(repo, tag).await.unwrap());
+        assert_eq!(storage.get_manifest(repo, tag).await.unwrap().data, manifest_data);
+        assert!(storage.manifest_exists(repo, &manifest_digest).await.unwrap());
+
+        let tags = storage.list_tags(repo).await.unwrap();
+        assert_eq!(tags, vec![tag]);
+
+        let repos = storage.list_repositories().await.unwrap();
+        assert_eq!(repos, vec![repo]);
+
+        let upload_data = b"upload test data";
+        let upload_digest = format!("sha256:{}", hex::encode(hmac_sha256::Hash::digest(upload_data)));
+
+        let session = storage.start_upload(repo).await.unwrap();
+        let uuid = session.uuid.clone();
+
+        let mut updated_session = storage.get_upload(&uuid).await.unwrap();
+        updated_session.data.extend_from_slice(upload_data);
+        storage.update_upload(updated_session).await.unwrap();
+        storage.complete_upload(&uuid, &upload_digest).await.unwrap();
+
+        assert!(storage.blob_exists(&upload_digest).await.unwrap());
+        assert_eq!(storage.get_blob(&upload_digest).await.unwrap(), upload_data);
+        assert!(storage.get_upload(&uuid).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_storage_service_with_filesystem() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = StorageService::new_filesystem(temp_dir.path().to_path_buf());
+
+        let repo = "test/service";
+        let tag = "v1.0";
+        let manifest_data = b"service test manifest".to_vec();
+
+        let _digest = service
+            .put_manifest(
+                repo,
+                tag,
+                manifest_data.clone(),
+                "application/vnd.oci.image.manifest.v1+json".to_string(),
+            )
+            .await
+            .unwrap();
+
+        assert!(service.manifest_exists(repo, tag).await.unwrap());
+        assert_eq!(service.get_manifest(repo, tag).await.unwrap().data, manifest_data);
+
+        let tags = service.list_tags(repo).await.unwrap();
+        assert_eq!(tags, vec![tag]);
     }
 }

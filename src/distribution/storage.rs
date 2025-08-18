@@ -9,12 +9,13 @@ use std::sync::RwLock;
 
 use digest::Digest;
 use hmac_sha256::Hash;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::distribution::{DistributionError, DistributionResult};
 
 /// Represents an ongoing blob upload session
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UploadSession {
     pub uuid: String,
     pub repository: String,
@@ -34,7 +35,7 @@ impl UploadSession {
 }
 
 /// Manifest metadata including content type
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ManifestEntry {
     pub data: Vec<u8>,
     pub content_type: String,
