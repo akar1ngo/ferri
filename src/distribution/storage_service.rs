@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use digest::Digest;
@@ -115,8 +115,9 @@ pub struct FileSystemStorage {
 }
 
 impl FileSystemStorage {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub fn new(root: &Path) -> Self {
+        // TODO: avoid clone
+        Self { root: root.to_owned() }
     }
 }
 
@@ -458,7 +459,7 @@ impl StorageService {
     }
 
     /// Create filesystem storage service
-    pub fn new_filesystem(root: PathBuf) -> Self {
+    pub fn new_filesystem(root: &Path) -> Self {
         Self {
             backend: StorageBackendType::FileSystem(Box::new(FileSystemStorage::new(root))),
         }
@@ -607,7 +608,7 @@ mod tests {
     #[tokio::test]
     async fn test_filesystem_storage_basic_operations() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = FileSystemStorage::new(temp_dir.path().to_path_buf());
+        let storage = FileSystemStorage::new(temp_dir.path());
 
         let digest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let data = b"test data".to_vec();
@@ -661,7 +662,7 @@ mod tests {
     #[tokio::test]
     async fn test_storage_service_with_filesystem() {
         let temp_dir = TempDir::new().unwrap();
-        let service = StorageService::new_filesystem(temp_dir.path().to_path_buf());
+        let service = StorageService::new_filesystem(temp_dir.path());
 
         let repo = "test/service";
         let tag = "v1.0";
