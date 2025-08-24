@@ -9,21 +9,20 @@ strip = true
 
 [dependencies]
 actix-web = "4.11.0"
-async-trait = "0.1.88"
+async-trait = "0.1.89"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }
 digest = "0.10.7"
 env_logger = "0.11.8"
-futures-util = "0.3.31"
 hex = "0.4.3"
 hmac-sha256 = { version = "1.1.12", features = ["traits"] }
 log = "0.4.27"
 regex-lite = "0.1.6"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
-thiserror = "2.0.12"
+serde_json = "1.0.143"
+thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
-uuid = { version = "1.17.0", features = ["v4"] }
+uuid = { version = "1.18.0", features = ["v4"] }
 
 [dev-dependencies]
 flate2 = "1.1.2"
-tempfile = "3.13.0"
+tempfile = "3.21.0"
