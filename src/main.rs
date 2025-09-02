@@ -77,7 +77,7 @@ async fn main() -> io::Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let args = Box::leak(Box::new(Args::parse()));
+    let args: &Args = Box::leak(Box::new(Args::parse()));
 
     HttpServer::new(|| {
         let storage_service = args.create_storage_service().expect("failed create storage service");
