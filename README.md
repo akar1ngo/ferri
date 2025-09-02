@@ -36,6 +36,15 @@ docker push localhost:5000/alpine:latest
 # など
 ```
 
+## 設定
+
+イメージはデフォルトでメモリ上に保存されます。
+永続ストレージを利用したい場合は、`--data-dir` で保存先ディレクトリを指定します。
+
+```bash
+cargo run -- --data-dir ./data
+```
+
 ## ソースコードの構成
 
 `model` モジュールと `distribution` モジュールで出来ています。

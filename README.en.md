@@ -36,6 +36,15 @@ docker push localhost:5000/alpine:latest
 # etc.
 ```
 
+## Configuration
+
+Images are stored in memory by default.
+To use persistent storage, specify the save directory with `--data-dir`.
+
+```bash
+cargo run -- --data-dir ./data
+```
+
 ## License
 
 Provided under the MIT License.
