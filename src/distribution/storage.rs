@@ -350,8 +350,7 @@ impl MemoryStorage {
             return Ok(false);
         }
 
-        // Blob already exists, so mounting is essentially a no-op in our simple implementation
-        // In a real implementation, this might involve creating references or symlinks
+        // no-op for in-memory storage
         Ok(true)
     }
 
@@ -360,7 +359,6 @@ impl MemoryStorage {
     pub fn populate_with_sample_data(&self) -> DistributionResult<()> {
         use crate::testing::sample_data::SampleImage;
 
-        // Create hello-world sample
         let hello_world = SampleImage::hello_world();
         self.put_blob(&hello_world.config_digest, hello_world.config_blob)?;
         self.put_blob(&hello_world.layer_digest, hello_world.layer_blob)?;
@@ -371,7 +369,6 @@ impl MemoryStorage {
             "application/vnd.oci.image.manifest.v1+json".to_string(),
         )?;
 
-        // Create alpine sample
         let alpine = SampleImage::alpine();
         self.put_blob(&alpine.config_digest, alpine.config_blob)?;
         self.put_blob(&alpine.layer_digest, alpine.layer_blob)?;

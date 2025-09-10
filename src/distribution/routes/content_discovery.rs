@@ -74,7 +74,6 @@ pub fn paginate<T: PartialEq>(items: &mut Vec<T>, last: Option<&T>, n: Option<u3
         items.drain(..=pos);
     }
 
-    // Apply limit `n` if provided.
     if let Some(n) = n {
         items.truncate(n as usize);
     }

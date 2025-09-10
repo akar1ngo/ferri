@@ -338,10 +338,9 @@ impl StorageBackend for FileSystemStorage {
             .await
             .map_err(|e| DistributionError::InternalError(e.to_string()))?;
 
-        // Serialize and save the session
         let session_json = serde_json::to_vec(&session).map_err(|e| DistributionError::InternalError(e.to_string()))?;
-
         let session_path = uploads_dir.join(&session.uuid);
+
         fs::write(&session_path, session_json)
             .await
             .map_err(|e| DistributionError::InternalError(e.to_string()))?;
