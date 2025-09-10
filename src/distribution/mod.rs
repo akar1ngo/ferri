@@ -4,6 +4,7 @@
 //! including pulling and pushing container images, manifests, and blobs.
 
 pub mod error;
+pub mod limits;
 pub mod names;
 pub mod routes;
 pub mod storage;
@@ -11,6 +12,7 @@ pub mod storage_service;
 
 use actix_web::web;
 pub use error::*;
+pub use limits::*;
 pub use names::*;
 pub use routes::*;
 pub use storage::*;

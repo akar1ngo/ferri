@@ -10,7 +10,7 @@ use actix_web::http::header::HeaderMap;
 use actix_web::{App, test, web};
 use serde_json::Value;
 
-use crate::distribution::{StorageService, configure_routes};
+use crate::distribution::{StorageService, UploadLimits, configure_routes};
 
 /// Test client for making requests to the registry
 pub struct RegistryTestClient {
@@ -91,6 +91,7 @@ impl RegistryTestClient {
             App::new()
                 .wrap(actix_web::middleware::NormalizePath::trim())
                 .app_data(self.storage.clone())
+                .app_data(web::Data::new(UploadLimits::default()))
                 .configure(configure_routes),
         )
         .await;
@@ -207,6 +208,7 @@ impl TestResponse {
 
 #[cfg(test)]
 mod tests {
+    use actix_web::http::StatusCode;
     use digest::Digest;
     use hmac_sha256::Hash;
 
@@ -529,5 +531,90 @@ mod tests {
             let response = client.get(uri).await;
             response.assert_status(expected_status);
         }
+    }
+
+    #[actix_web::test]
+    async fn test_upload_limit_exceeded() {
+        let custom_limits = UploadLimits {
+            max_blob_size: 1024,
+            max_manifest_size: 256,
+        };
+
+        let storage = StorageService::new_memory();
+        let app = test::init_service(
+            App::new()
+                .wrap(actix_web::middleware::NormalizePath::trim())
+                .app_data(web::Data::new(storage))
+                .app_data(web::Data::new(custom_limits))
+                .configure(configure_routes),
+        )
+        .await;
+
+        let large_manifest = format!(
+            r#"
+{{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {{
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "size": 123,
+    "digest": "sha256:abcd"
+  }},
+  "layers": [],
+  "annotations": {{
+    "test": "{}"
+  }}
+}}"#,
+            "x".repeat(256)
+        );
+        let large_manifest_bytes = large_manifest.into_bytes();
+
+        let req = test::TestRequest::put()
+            .uri("/v2/test/manifests/v1.0")
+            .insert_header(("Content-Type", "application/vnd.oci.image.manifest.v1+json"))
+            .set_payload(large_manifest_bytes)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[actix_web::test]
+    async fn test_upload_limit_success() {
+        let custom_limits = UploadLimits {
+            max_blob_size: 1024,
+            max_manifest_size: 256,
+        };
+
+        let storage = StorageService::new_memory();
+        let app = test::init_service(
+            App::new()
+                .wrap(actix_web::middleware::NormalizePath::trim())
+                .app_data(web::Data::new(storage))
+                .app_data(web::Data::new(custom_limits))
+                .configure(configure_routes),
+        )
+        .await;
+
+        let small_manifest = r#"
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "size": 123,
+    "digest": "sha256:abcd"
+  },
+  "layers": []
+}"#;
+
+        let req = test::TestRequest::put()
+            .uri("/v2/test/manifests/v1.0")
+            .insert_header(("Content-Type", "application/vnd.oci.image.manifest.v1+json"))
+            .set_payload(small_manifest.as_bytes())
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
     }
 }

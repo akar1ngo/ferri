@@ -5,10 +5,7 @@ use std::collections::HashMap;
 use actix_web::{HttpRequest, HttpResponse, Result, patch, post, put, web};
 use serde::Deserialize;
 
-use crate::distribution::{DistributionError, StorageService};
-
-const MAX_BLOB_SIZE: usize = 1 << 30; // 1GB
-const MAX_MANIFEST_SIZE: usize = 4 << 20; // 4MB
+use crate::distribution::{DistributionError, StorageService, UploadLimits};
 
 #[derive(Deserialize)]
 pub struct UploadQuery {
@@ -62,6 +59,7 @@ pub async fn complete_blob_upload(
     path: web::Path<(String, String)>,
     query: web::Query<HashMap<String, String>>,
     storage: web::Data<StorageService>,
+    limits: web::Data<UploadLimits>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
@@ -78,12 +76,12 @@ pub async fn complete_blob_upload(
     // If there's a body, append it as the final chunk
     if !body.is_empty() {
         // Check payload size before processing
-        if body.len() > MAX_BLOB_SIZE {
+        if body.len() > limits.max_blob_size {
             return Err(DistributionError::PayloadTooLarge);
         }
 
         // Check total size after appending
-        if session.data.len() + body.len() > MAX_BLOB_SIZE {
+        if session.data.len() + body.len() > limits.max_blob_size {
             return Err(DistributionError::PayloadTooLarge);
         }
 
@@ -120,6 +118,7 @@ pub async fn complete_blob_upload(
 pub async fn chunked_blob_upload(
     path: web::Path<(String, String)>,
     storage: web::Data<StorageService>,
+    limits: web::Data<UploadLimits>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
@@ -129,12 +128,12 @@ pub async fn chunked_blob_upload(
     let mut session = storage.get_upload(&uuid).await?;
 
     // Check payload size before processing
-    if body.len() > MAX_BLOB_SIZE {
+    if body.len() > limits.max_blob_size {
         return Err(DistributionError::PayloadTooLarge);
     }
 
     // Check total size after appending
-    if session.data.len() + body.len() > MAX_BLOB_SIZE {
+    if session.data.len() + body.len() > limits.max_blob_size {
         return Err(DistributionError::PayloadTooLarge);
     }
 
@@ -177,13 +176,14 @@ pub async fn chunked_blob_upload(
 pub async fn put_manifest(
     path: web::Path<(String, String)>,
     storage: web::Data<StorageService>,
+    limits: web::Data<UploadLimits>,
     req: HttpRequest,
     body: web::Bytes,
 ) -> Result<HttpResponse, DistributionError> {
     let (name, reference) = path.into_inner();
 
     // Check manifest size
-    if body.len() > MAX_MANIFEST_SIZE {
+    if body.len() > limits.max_manifest_size {
         return Err(DistributionError::PayloadTooLarge);
     }
 
