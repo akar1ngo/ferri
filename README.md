@@ -45,6 +45,8 @@ docker push localhost:5000/alpine:latest
 cargo run -- --data-dir ./data
 ```
 
+また、`cargo run -- --help` でヘルプを表示できます。
+
 ## ソースコードの構成
 
 `model` モジュールと `distribution` モジュールで出来ています。

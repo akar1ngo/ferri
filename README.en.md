@@ -45,6 +45,8 @@ To use persistent storage, specify the save directory with `--data-dir`.
 cargo run -- --data-dir ./data
 ```
 
+Additionally, you can view help via `cargo run -- --help`.
+
 ## License
 
 Provided under the MIT License.
